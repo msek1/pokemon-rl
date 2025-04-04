@@ -1,0 +1,9 @@
+- Move -> list of (game, turnm player) tuples
+- Ability -> list of (game, turn, player) tuples
+- Pokemon -> list of (game, player) tupl
+- Map turns to states
+- game -> pokemon movesets, abilities, items, spread.
+- moves -> embedding -> moves
+- pokemon -> embedding -> pokemon
+- state -> win probability percentage?
+- 
