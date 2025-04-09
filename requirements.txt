@@ -1,0 +1,7 @@
+torch
+matplotlib
+tqdm
+numpy
+pandas
+requests
+poke-env
