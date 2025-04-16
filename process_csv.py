@@ -12,6 +12,18 @@ def scale_min_max(series):
 
     return (series - min_val) / (max_val - min_val)
 
+
+def augment_HP(df_raw, n = 20):
+    rows = []
+    for _, row in df_raw.iterrows():
+        max_hp = row["HP"]
+        for _ in range(n):
+            new_row = row.copy()
+            new_row["HP"] = np.random.uniform(0, max_hp)
+            rows.append(new_row)
+    
+    return pd.DataFrame(rows)
+
 def get_input(data, df_raw, one_hot_keys):
     data_keys = data.keys()
 
@@ -28,17 +40,19 @@ def get_input(data, df_raw, one_hot_keys):
             scaled_keys.append(scaled_key)
             df[scaled_key] = scale_min_max(df[k])
 
+    # generate one hot columns for each type in one_hot_keys
     df_complete = pd.get_dummies(df, columns=one_hot_keys)
 
+    # extract only the one_hot_cols and the scaled_keys columns
     one_hot_cols = []
     for col in df_complete.columns:
         for start in one_hot_keys:
             if (col.startswith(start)):
                 one_hot_cols.append(col)
 
-    return df_complete[one_hot_cols + scaled_keys]
+    return df_complete[one_hot_cols + scaled_keys] 
 
-df1 = pd.read_csv("moves.csv")
+df1 = pd.read_csv("data/moves.csv")
 data = {
     "type": [],
     "category": [],
@@ -50,11 +64,11 @@ data = {
     "crit": []
 }
 moves_df = get_input(data, df1, ["type", "category"])
-print(moves_df)
 
-df1 = pd.read_csv("pokedex.csv")
-df2 = pd.read_csv("pokemon.csv")
+df1 = pd.read_csv("data/pokedex.csv")
+df2 = pd.read_csv("data/pokemon.csv")
 df_joined = df1.merge(df2, left_on="Name", right_on="name", how="inner")
+pokemon_df = augment_HP(df_joined)
     
 data = {
     "Type 1": [],
@@ -88,7 +102,6 @@ data = {
 
 
 pokemon_df = get_input(data, df_joined, ["Type 1", "Type 2"])
-print(pokemon_df)
 
 
 

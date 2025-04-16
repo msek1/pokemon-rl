@@ -85,7 +85,7 @@ def get_latent_moves():
 
     torch.save(autoencoder_moves, "autoencoder_moves.pth")
 
-    return latent_vectors
+    return latent_vectors, output_vectors
 
 def get_latent_pokemon():
     pokemon_tensor = torch.tensor(pokemon_df.values.astype(float), dtype=torch.float32)
@@ -100,12 +100,10 @@ def get_latent_pokemon():
 
     torch.save(autoencoder_pokemon, "autoencoder_pokemon.pth")
 
-    return latent_vectors
+    return latent_vectors, output_vectors
 
 
-latent_vectors = get_latent_moves() # or get_latent_pokemon
-
-print(latent_vectors)
+latent_vectors, output_vectors = get_latent_pokemon() # or get_latent_moves
 
 pyplot.hist(latent_vectors.numpy().flatten(), bins=50)
 pyplot.title("Latent Space Distribution")

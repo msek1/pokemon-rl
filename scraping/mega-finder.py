@@ -1,3 +1,5 @@
+# Gets the megas and zmoves from the games and saves to megas.txt and zmoves.txt
+
 import os
 
 DIRS = ["nu", "ou", "ru", "ubers", "uu"]
