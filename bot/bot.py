@@ -13,7 +13,8 @@ class RLBot(SimpleHeuristicsPlayer):
     env_encoder: EnvironmentEncoder
 
     def __init__(self, name, format, team_name):
-        super().__init__(AccountConfiguration(name, None), battle_format=format,  max_concurrent_battles=100000, team=teams[team_name])
+        team = None if format.endswith("randombattle") else teams[team_name]
+        super().__init__(AccountConfiguration(name, None), battle_format=format,  max_concurrent_battles=100000, team=team)
 
         self.env_mapper = EnvironmentMapper()
         self.env_encoder = EnvironmentEncoder()
