@@ -34,11 +34,12 @@ class EnvironmentMapper:
         ownActive = None if battle.active_pokemon is None else self.mapSinglePokemon(battle.active_pokemon)
         oppActive = None if battle.opponent_active_pokemon is None else self.mapSinglePokemon(battle.opponent_active_pokemon)
 
+        ownEffects = None if battle.active_pokemon is None else self.mapEphemeralEffects(battle.active_pokemon)
+        oppEffects = None if battle.opponent_active_pokemon is None else self.mapEphemeralEffects(battle.opponent_active_pokemon)
+
         return NetworkBattle(
-            ownPkmn, ownActive,
-            self.mapEphemeralEffects(battle.active_pokemon),
-            oppPkmn, oppActive,
-            self.mapEphemeralEffects(battle.opponent_active_pokemon),
+            ownPkmn, ownActive, ownEffects,
+            oppPkmn, oppActive, oppEffects,
             self.mapTerrain(battle)
         )
 

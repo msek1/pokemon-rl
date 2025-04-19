@@ -161,8 +161,8 @@ class Pokemon:
 class NetworkBattle:
     ownPokemon: List[Pokemon]
     ownActive: Optional[Pokemon]
-    ownActiveStatus: PokemonEphemeralStatus
+    ownActiveStatus: Optional[PokemonEphemeralStatus]
     oppPokemon: List[Pokemon]
     oppActive: Optional[Pokemon]
-    oppActiveStatus: PokemonEphemeralStatus
+    oppActiveStatus: Optional[PokemonEphemeralStatus]
     field: BattleTerrain
