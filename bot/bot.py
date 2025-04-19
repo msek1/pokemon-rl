@@ -1,86 +1,42 @@
-from poke_env import AccountConfiguration
+from poke_env import AccountConfiguration, ServerConfiguration
 from poke_env.player import RandomPlayer, SimpleHeuristicsPlayer
 from poke_env.teambuilder.teambuilder import Teambuilder
-# from encoder_network import EncoderNetwork
-import asyncio
+from poke_env.environment.battle import AbstractBattle
+from bot.teams import teams
+from bot.bot_mapping import EnvironmentMapper, EnvironmentEncoder
+from encoding.autoencoder import DEVICE
 
-# class MyBot(SimpleHeuristicsPlayer):
+import time
 
-ou_team = '''Pelipper @ Life Orb  
-Ability: Drizzle  
-Tera Type: Water  
-EVs: 248 HP / 252 SpA / 8 SpD  
-Modest Nature  
-IVs: 0 Atk  
-- Hurricane  
-- Roost  
-- Ice Beam  
-- Surf  
+class RLBot(SimpleHeuristicsPlayer):
+    env_mapper: EnvironmentMapper
+    env_encoder: EnvironmentEncoder
 
-Ogerpon-Wellspring (F) @ Wellspring Mask  
-Ability: Water Absorb  
-Tera Type: Water  
-EVs: 252 HP / 4 SpA / 252 Spe  
-Timid Nature  
-- Grassy Terrain  
-- Giga Drain  
-- Leech Seed  
-- Spikes  
+    def __init__(self, name, format, team_name):
+        super().__init__(AccountConfiguration(name, None), battle_format=format,  max_concurrent_battles=100000, team=teams[team_name])
 
-Azumarill @ Sitrus Berry  
-Ability: Huge Power  
-Tera Type: Water  
-EVs: 252 HP / 252 Atk / 4 SpD  
-Adamant Nature  
-- Belly Drum  
-- Aqua Jet  
-- Play Rough  
-- Superpower  
+        self.env_mapper = EnvironmentMapper()
+        self.env_encoder = EnvironmentEncoder()
 
-Darkrai @ Expert Belt  
-Ability: Bad Dreams  
-Tera Type: Dark  
-EVs: 252 SpA / 4 SpD / 252 Spe  
-Timid Nature  
-IVs: 0 Atk  
-- Will-O-Wisp  
-- Dark Pulse  
-- Foul Play  
-- Psyshock  
+    def choose_move(self, battle: AbstractBattle):
+        start = time.time_ns()
+        mapping = self.env_mapper.mapBattle(battle)
+        mid = time.time_ns()
+        encoding = self.env_encoder.encodeBattle(mapping)
+        end = time.time_ns()
+        print(f"Mapping Time: {(mid - start) / 1000000}ms, {(end - mid) / 1000000}ms")
+        print(encoding.device)
+        return super().choose_move(battle)
 
-Alomomola @ Leftovers  
-Ability: Regenerator  
-Tera Type: Water  
-EVs: 252 HP / 252 Def / 4 SpD  
-Bold Nature  
-IVs: 0 Atk  
-- Light Screen  
-- Rest  
-- Wish  
-- Protect  
-
-Gholdengo @ Choice Scarf  
-Ability: Good as Gold  
-Tera Type: Steel  
-EVs: 252 SpA / 4 SpD / 252 Spe  
-Timid Nature  
-IVs: 0 Atk  
-- Flash Cannon  
-- Shadow Ball  
-- Make It Rain  
-- Reflect  
-'''
-
-
-async def play():
-    # No authentication required
-    my_account_config = AccountConfiguration("pokemonrlbotcs486", None)
-    # player = RandomPlayer(account_configuration=my_account_config, battle_format="gen9ou", team=ou_team)
-    player = RandomPlayer(account_configuration=my_account_config)
-    # team = Teambuilder.parse_showdown_team(ou_team)
-    print("Starting bot...")
-    # print(str(team)[1:-1])
-    await player.accept_challenges(None, 1)
-
-if __name__ == "__main__":
-    asyncio.run(play())
+    async def play(self):
+        # No authentication required
+        # my_account_config = AccountConfiguration("pokemonrlbotcs486", None)
+        # player = SimpleHeuristicsPlayer(account_configuration=my_account_config, battle_format="gen9ou", team=ou_team)
+        # player = SimpleHeuristicsPlayer(account_configuration=my_account_config, battle_format="gen7ou", team=gen_7_team)
+        # player = SimpleHeuristicsPlayer(account_configuration=my_account_config, battle_format="gen7anythinggoes", team=teams["gen_7_ag"])
+        # player = RandomPlayer(account_configuration=my_account_config, battle_format="gen7anythinggoes", team=gen_7_ag)
+        # player = SimpleHeuristicsPlayer(account_configuration=my_account_config)
+        # team = Teambuilder.parse_showdown_team(ou_team)
+        print("Starting bot...")
+        # print(str(team)[1:-1])
+        await self.accept_challenges(None, 1)

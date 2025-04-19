@@ -586,7 +586,7 @@ id,move,description,type,category,power,accuracy,pp,z-effect,priority,crit
 585,Moonblast,"Borrowing the power of the moon, the user attacks the target. This may also lower the targetâ€™s Sp. Atk stat.",Fairy,Special,95,100%,15,175 Power,0,0
 586,Boomburst,"The user attacks everything around it with the destructive power of a terrible, explosive sound.",Normal,Special,140,100%,10,200 Power,0,0
 587,Fairy Lock,"By locking down the battlefield, the user keeps all PokÃ©mon from fleeing during the next turn.",Fairy,Status,0,â€”,10,Defense â†‘,0,0
-588,Kingâ€™s Shield,The user takes a defensive stance while it protects itself from damage. It also harshly lowers the Attack stat of any attacker who makes direct contact.,Steel,Status,0,â€”,10,Reset user's stats,4,0
+588,King's Shield,The user takes a defensive stance while it protects itself from damage. It also harshly lowers the Attack stat of any attacker who makes direct contact.,Steel,Status,0,â€”,10,Reset user's stats,4,0
 589,Play Nice,"The user and the target become friends, and the target loses its will to fight. This lowers the targetâ€™s Attack stat.",Normal,Status,0,â€”,20,Defense â†‘,0,0
 590,Confide,"The user tells the target a secret, and the target loses its ability to concentrate. This lowers the targetâ€™s Sp. Atk stat.",Normal,Status,0,â€”,20,Special Defense â†‘,0,0
 591,Diamond Storm,The user whips up a storm of diamonds to damage opposing PokÃ©mon. This may also sharply raise the userâ€™s Defense stat.,Rock,Physical,100,95%,5,180 Power,0,0
@@ -614,7 +614,7 @@ id,move,description,type,category,power,accuracy,pp,z-effect,priority,crit
 613,Oblivion Wing,The user absorbs its targetâ€™s HP. The userâ€™s HP is restored by over half of the damage taken by the target.,Flying,Special,80,100%,10,160 Power,0,0
 614,Thousand Arrows,This move also hits opposing PokÃ©mon that are in the air. Those PokÃ©mon are knocked down to the ground.,Ground,Physical,90,100%,10,180 Power,0,0
 615,Thousand Waves,The user attacks with a wave that crawls along the ground. Those hit canâ€™t flee from battle.,Ground,Physical,90,100%,10,175 Power,0,0
-616,Landâ€™s Wrath,The user gathers the energy of the land and focuses that power on opposing PokÃ©mon to damage them.,Ground,Physical,90,100%,10,185 Power,0,0
+616,Land's Wrath,The user gathers the energy of the land and focuses that power on opposing PokÃ©mon to damage them.,Ground,Physical,90,100%,10,185 Power,0,0
 617,Light of Ruin,"Drawing power from the Eternal Flower, the user fires a powerful beam of light. This also damages the user quite a lot.",Fairy,Special,140,90%,5,200 Power,0,0
 618,Origin Pulse,The user attacks opposing PokÃ©mon with countless beams of light that glow a deep and brilliant blue.,Water,Special,110,85%,10,185 Power,0,0
 619,Precipice Blades,The user attacks opposing PokÃ©mon by manifesting the power of the land in fearsome blades of stone.,Ground,Physical,120,85%,10,190 Power,0,0
@@ -697,6 +697,6 @@ id,move,description,type,category,power,accuracy,pp,z-effect,priority,crit
 696,Moongeist Beam,The user emits a sinister ray to attack the target. This move can be used on the target regardless of its Abilities.,Ghost,Special,100,100%,5,180 Power,0,0
 697,Tearful Look,The user gets teary eyed to make the target lose its combative spirit. This lowers the targetâ€™s Attack and Sp. Atk stats.,Normal,Status,0,â€”,20,Defense â†‘,0,0
 698,Zing Zap,"A strong electric blast crashes down on the target, giving it an electric shock. This may also make the target flinch.",Electric,Physical,80,100%,10,160 Power,0,0
-699,Natureâ€™s Madness,The user hits the target with the force of nature. It halves the targetâ€™s HP.,Fairy,Special,â€”,100%,10,100 Power,0,0
+699,Nature's Madness,The user hits the target with the force of nature. It halves the targetâ€™s HP.,Fairy,Special,â€”,100%,10,100 Power,0,0
 700,Multi-Attack,"Cloaking itself in high energy, the user slams into the target. The memory held determines the moveâ€™s type.",Normal,Physical,90,100%,10,185 Power,0,0
 701,"10,000,000 Volt Thunderbolt","The user, Pikachu wearing a cap, powers up a jolt of electricity using its Z-Power and unleashes it. Critical hits land more easily.",Electric,Special,195,â€”,1,~Thunderbolt,0,2
