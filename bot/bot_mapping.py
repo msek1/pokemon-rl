@@ -5,7 +5,7 @@ from poke_env.environment.battle import AbstractBattle
 from poke_env.environment import Effect, SideCondition, Weather, Field, Pokemon as PokeEnvPkmn, Status
 import torch
 import pickle
-from encoding.create_encoding_datasets import PokemonEncodingData, CURRENT_PP_INDEX
+from encoding.create_encoding_datasets import PokemonEncodingData, CURRENT_PP_INDEX, get_log_effectiveness_vector
 from encoding.autoencoder import Autoencoder, EMBEDDING_DIMENSION, DEVICE
 from encoding.sphere_encoding import ability_dim, item_dim
 from typing import List, Optional
@@ -282,7 +282,13 @@ class EnvironmentEncoder:
         result[:EMBEDDING_DIMENSION] = self.pokemon_encoder.encoder(encoding_data.to_vector().to(DEVICE))
         
         for i,move in enumerate(pokemon.known_moves):
-            v = self.move_data[move.name]
+            if move.name.startswith("hiddenpower") and len(move.name) > 11:
+                hp_type = move.name[11:].capitalize()
+                effectiveness = get_log_effectiveness_vector(hp_type)
+                v = self.move_data["hiddenpower"]
+                v.effectiveness = torch.Tensor(effectiveness)
+            else:
+                v = self.move_data[move.name]
             vec = v.to_vector()
             vec[CURRENT_PP_INDEX] = move.pp_left / v.pp
             result[(i+1) * EMBEDDING_DIMENSION: (i+2)*EMBEDDING_DIMENSION] = self.move_encoder.encoder(vec.to(DEVICE))

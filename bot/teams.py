@@ -91,6 +91,7 @@ Ability: Protean
 EVs: 100 HP  
 IVs: 0 Atk  
 - Hydro Pump  
+- Hidden Power [Grass]  
 
 Heatran @ Firium Z  
 Ability: Flash Fire  
@@ -101,12 +102,13 @@ Gliscor @ Toxic Orb
 Ability: Hyper Cutter  
 EVs: 112 HP  
 - Acrobatics  
+- Hidden Power [Fighting]  
 
 Kartana @ Steelium Z  
 Ability: Beast Boost  
 EVs: 140 HP  
 IVs: 0 Atk  
-- Air Slash  
+- Air Slash
 ''',
 
 ##################################################################
