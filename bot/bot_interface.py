@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Optional, List
 import torch
 
-STATUSES = ["poison", "toxic", "paralysis", "sleep", "burn", "freeze"]
+STATUSES = ["poison", "toxic", "paralysis", "sleep", "burn", "freeze", "faint"]
 WEATHER = ["sun", "rain", "snow", "sandstorm"]
 TERRAIN = ["electric", "grassy", "psychic", "misty"]
 
@@ -55,6 +55,17 @@ class PokemonBoosts:
 class PokemonStatus:
     majorStatus: Optional[str] = None # Poison, Toxic, Paralysis, Sleep, Burn, Freeze
     statusTurns: int = 0
+
+    def to_vector(self):
+        result = torch.zeros(8)
+        if self.majorStatus is not None:
+            result[STATUSES.index(self.majorStatus)] = 1
+            result[7] = float(self.statusTurns)
+        return result
+
+@dataclass
+class PokemonEphemeralStatus:
+    '''Status can be removed by switching out and only applies to the active pokemon'''
     isConfused: bool = False
     isInfatuated: bool = False
     isTrapped: bool = False
@@ -68,25 +79,25 @@ class PokemonStatus:
     isRecharging: bool = False
     isCharging: bool = False
     didProtect: bool = False
+    isFirstTurn: bool = False
 
     def to_vector(self):
-        result = torch.zeros(21)
-        if self.majorStatus is not None:
-            result[STATUSES.index(self.majorStatus)] = 1
-            result[6] = float(self.statusTurns)
+        result = torch.zeros(15)
         if self.disabledMove is not None:
-            result[7] = 1
-            result[8] = self.disabledMove
-        result[9:] = torch.Tensor(
+            result[0] = 1
+            result[1] = self.disabledMove
+        result[2:] = torch.Tensor(
             [self.isConfused, self.isInfatuated, self.isTrapped, self.isDrowsy, self.isSubstituted, self.perishSongTurns,
-             self.isSeeded, self.isTaunted, self.isTormented, self.isRecharging, self.isCharging, self.didProtect]
+             self.isSeeded, self.isTaunted, self.isTormented, self.isRecharging, self.isCharging, self.didProtect, self.isFirstTurn]
         )
         return result
 
 @dataclass
 class BattleTerrain:
     weather: Optional[str] = None # Sun, Rain, Sandstorm, Hail
+    weatherTurns: int = 0
     terrain: Optional[str] = None # Electric, Grassy, Psychic, Misty
+    terrainTurns: int = 0
 
     isTrickRoom: int = 0
     isMagicRoom: int = 0
@@ -97,28 +108,46 @@ class BattleTerrain:
     teamPoisonLayers: int = 0
     teamStealthRocks: bool = False
     teamStickyWeb: bool = False
+    teamTailwind: int = 0
+    teamSafeguard: int = 0
+    teamAuroraVeil: int = 0
+    teamReflect: int = 0
+    teamLightScreen: int = 0
     oppSpikesLayers: int = 0
     oppPoisonLayers: int = 0
     oppStealthRocks: bool = False
     oppStickyWeb: bool = False
+    oppTailwind: int = 0
+    oppSafeguard: int = 0
+    oppAuroraVeil: int = 0
+    oppReflect: int = 0
+    oppLightScreen: int = 0
 
     def to_vector(self):
-        result = torch.zeros(20)
+        result = torch.zeros(32)
         if self.weather is not None:
             result[WEATHER.index(self.weather)] = 1
+            result[4] = self.weatherTurns
         elif self.terrain is not None:
-            result[4 + TERRAIN.index(self.terrain)] = 1
-        result[8:] = torch.Tensor(
-            [self.isTrickRoom, self.isMagicRoom, self.isWonderRoom, self.isGravity,
+            result[5 + TERRAIN.index(self.terrain)] = 1
+            result[9] = self.terrainTurns
+        result[10:] = torch.Tensor(
+            [
+             self.isTrickRoom, self.isMagicRoom, self.isWonderRoom, self.isGravity,
+
              self.teamSpikesLayers, self.teamPoisonLayers, self.teamStealthRocks, self.teamStickyWeb,
-             self.oppSpikesLayers, self.oppPoisonLayers, self.oppStealthRocks, self.oppStickyWeb]
+             self.teamTailwind, self.teamSafeguard, self.teamAuroraVeil, self.teamReflect, self.teamLightScreen,
+
+             self.oppSpikesLayers, self.oppPoisonLayers, self.oppStealthRocks, self.oppStickyWeb,
+             self.oppTailwind, self.oppSafeguard, self.oppAuroraVeil, self.oppReflect, self.oppLightScreen
+            ]
         )
         return result
 
 @dataclass
 class Pokemon:
     name: str
-    baseStats: Optional[PokemonStats]
+    baseStats: PokemonStats
     stats: Optional[PokemonStats]
     boosts: PokemonBoosts
     types: List[str]
@@ -131,7 +160,9 @@ class Pokemon:
 @dataclass
 class NetworkBattle:
     ownPokemon: List[Pokemon]
-    ownActive: Optional[Pokemon]
+    ownActive: Pokemon
+    ownActiveStatus: PokemonEphemeralStatus
     oppPokemon: List[Pokemon]
-    oppActive: Optional[Pokemon]
+    oppActive: Pokemon
+    oppActiveStatus: PokemonEphemeralStatus
     field: BattleTerrain
