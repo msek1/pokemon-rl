@@ -160,9 +160,9 @@ class Pokemon:
 @dataclass
 class NetworkBattle:
     ownPokemon: List[Pokemon]
-    ownActive: Pokemon
+    ownActive: Optional[Pokemon]
     ownActiveStatus: PokemonEphemeralStatus
     oppPokemon: List[Pokemon]
-    oppActive: Pokemon
+    oppActive: Optional[Pokemon]
     oppActiveStatus: PokemonEphemeralStatus
     field: BattleTerrain

@@ -276,6 +276,8 @@ class EnvironmentEncoder:
     def encode_pokemon(self, pokemon: Pokemon) -> torch.Tensor:
         # Encode [pokemon info, move info, ability, item, status]
         result = torch.zeros(POKEMON_FULL_ENCODING_DIM)
+        if pokemon is None:
+            return result
         encoding_data = PokemonEncodingData(
             pokemon.types, *pokemon.baseStats.as_list(), pokemon.current_hp
         )
