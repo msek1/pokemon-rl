@@ -166,3 +166,8 @@ class NetworkBattle:
     oppActive: Optional[Pokemon]
     oppActiveStatus: Optional[PokemonEphemeralStatus]
     field: BattleTerrain
+
+    can_z_move: bool
+    can_mega: bool
+    can_opp_z_move: bool
+    can_opp_mega: bool

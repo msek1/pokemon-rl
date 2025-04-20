@@ -13,10 +13,11 @@ from typing import List, Optional
 BOOST_ENCODING_DIM = 8
 STATUS_ENCODING_DIM = 8
 EPHEMERAL_STATUS_DIM = 15
+MEGA_Z_DIM = 4
 TERRAIN_ENCODING_DIM = 32
 POKEMON_FULL_ENCODING_DIM = 5*EMBEDDING_DIMENSION + ability_dim + item_dim + STATUS_ENCODING_DIM # Pokemon + Moves have same embedding dim
 
-STATE_DIMENSION = 2*BOOST_ENCODING_DIM + TERRAIN_ENCODING_DIM + 14 * POKEMON_FULL_ENCODING_DIM + 2*EPHEMERAL_STATUS_DIM
+STATE_DIMENSION = 2*BOOST_ENCODING_DIM + TERRAIN_ENCODING_DIM + 14 * POKEMON_FULL_ENCODING_DIM + 2*EPHEMERAL_STATUS_DIM + MEGA_Z_DIM
 
 DEVICE = "cpu"
 
@@ -41,7 +42,9 @@ class EnvironmentMapper:
         return NetworkBattle(
             ownPkmn, ownActive, ownEffects,
             oppPkmn, oppActive, oppEffects,
-            self.mapTerrain(battle)
+            self.mapTerrain(battle),
+            battle.can_z_move, battle.can_mega_evolve,
+            battle._opponent_can_z_move, battle._opponent_can_mega_evolve
         )
 
 
@@ -278,7 +281,9 @@ class EnvironmentEncoder:
         if battle.oppActiveStatus is not None:
             res[PKMN_AND_BOOSTS + EPHEMERAL_STATUS_DIM: PKMN_AND_BOOSTS + 2*EPHEMERAL_STATUS_DIM] = battle.oppActiveStatus.to_vector()
         
-        res[PKMN_AND_BOOSTS + 2*EPHEMERAL_STATUS_DIM:] = battle.field.to_vector()
+        res[PKMN_AND_BOOSTS + 2*EPHEMERAL_STATUS_DIM : PKMN_AND_BOOSTS + 2*EPHEMERAL_STATUS_DIM + TERRAIN_ENCODING_DIM] = battle.field.to_vector()
+        PRE_MOVE_MODIFIER_DIM = PKMN_AND_BOOSTS + 2*EPHEMERAL_STATUS_DIM + TERRAIN_ENCODING_DIM
+        res[PRE_MOVE_MODIFIER_DIM:] = torch.Tensor([battle.can_z_move, battle.can_mega, battle.can_opp_z_move, battle.can_opp_mega])
         return res.to(DEVICE)
 
     def encode_pokemon(self, pokemon: Pokemon) -> torch.Tensor:
