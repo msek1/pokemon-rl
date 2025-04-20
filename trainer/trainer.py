@@ -13,23 +13,31 @@ FAINT_EVENT = "faint"
 DAMAGE_EVENT = "-damage"
 HEAL_EVENT = "-heal"
 
-from torch.utils.data import TensorDataset, DataLoader
+import torch
 from torch import distributions
 import torch.nn.functional as f
-import torch
 import torch.optim as optim
+from torch.utils.data import TensorDataset, DataLoader
 
 class Trainer:
-    def __init__(self, lr = 0.001, gamma = 0.98, battles_per_epoch = 1, reward_policy: RewardPolicy=RewardPolicy()) -> None:
+    def __init__(self,
+                 lr = 0.001, gamma = 0.98, battles_per_epoch = 1,
+                 ppo_steps = 8, clip_epsilon = 0.2, entropy_coefficient = 0.01,
+                 reward_policy: RewardPolicy=RewardPolicy()) -> None:
         self.lr = lr
         self.gamma = gamma
         self.battles_per_epoch = battles_per_epoch
+        self.ppo_steps = ppo_steps
+        self.clip_epsilon = clip_epsilon
+        self.entropy_coefficient = entropy_coefficient
         self.reward_policy = reward_policy
     
-    def run_epochs(self, p1: RLBot, p2: Player, num_epochs: int = 1,  set_weights_interval: int = 0, evaluation_interval: int = 0):
+    def run_epochs(self, p1: RLBot, p2: Player, optimizer: optim.Optimizer, num_epochs: int = 1,  set_weights_interval: int = 0, evaluation_interval: int = 0):
         eval_results = []
+        loss_results = []
         for e in tqdm(range(1,num_epochs + 1)):
-            self.run_epoch(p1, p2)
+            aloss, vloss = self.run_epoch(p1, p2, optimizer)
+            loss_results.append((aloss, vloss))
             if set_weights_interval > 0 and e % set_weights_interval == 0 and p2 is RLBot:
                 p2.decision_network = deepcopy(p1.decision_network)
             
@@ -41,22 +49,59 @@ class Trainer:
             if p2 is RLBot:
                 p2.clear_battle_data()
 
-        return eval_results if len(eval_results) > 0 else None
+        return loss_results, eval_results if len(eval_results) > 0 else None
 
 
-    def run_epoch(self, p1: RLBot, p2: Player):
+    def run_epoch(self, p1: RLBot, p2: Player, optimizer: torch.optim.Optimizer):
         asyncio.run(self.make_players_play(p1, p2, self.battles_per_epoch))
 
         battle_returns_advantages = self.calculate_all_returns_advantages(p1)
 
-        states = {
-            tag: [t[0] for t in data] for (tag,data) in p1.get_battle_data().items()
-        }
-        actions = {
-            tag: [t[1] for t in data] for (tag,data) in p1.get_battle_data().items()
-        }
+        # battle ids are not needed at this point
+        states = []
+        actions = []
+        actions_log_probs = []
+        values = []
+        returns = []
+        advantages = []
+        for battle in p1.battle_data:
+            data = p1.battle_data[battle]
+            for entry in data:
+                states.append(entry[0])
+                actions.append(entry[1].item())
+                actions_log_probs.append(entry[2].item())
+                values.append(entry[3].item())
 
-        return battle_returns_advantages
+            ra = battle_returns_advantages.get(battle)
+            returns.append(ra[0])
+            advantages.append(ra[1])
+        returns = torch.cat(returns)
+        advantages = torch.cat(advantages)
+        states = torch.stack(states) 
+        actions = torch.tensor(actions)
+        actions_log_probs = torch.tensor(actions_log_probs)
+        values = torch.tensor(values)
+
+        results_dataset = TensorDataset(
+            states.detach(),
+            actions.detach(),
+            actions_log_probs.detach(),
+            advantages.detach(),
+            returns.detach()
+        )
+
+        policy_loss, value_loss = self.update_policy(
+            agent=p1.decision_network,
+            training_results_dataset=results_dataset,
+            ppo_steps=self.ppo_steps,
+            optimizer=optimizer,
+            entropy_coefficient=self.entropy_coefficient,
+            epsilon=self.clip_epsilon
+        )
+
+        return policy_loss, value_loss
+
+        # return battle_returns_advantages
     
     def calculate_all_returns_advantages(self, p: RLBot):
         battle_returns_advantages = {}
@@ -137,6 +182,10 @@ class Trainer:
         advantages = []
         gae = 0
         values = values + [0]  # append 0 for V(s_{t+1}) at end
+
+        if len(rewards) > len(values):
+            print("HEEEERERERE")
+            print(len(rewards), len(values), flush=True)
 
         for t in reversed(range(len(rewards))):
             delta = rewards[t] + self.gamma * values[t + 1] - values[t]

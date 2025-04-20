@@ -32,7 +32,7 @@ class RLBot(Player):
         self.env_encoder = EnvironmentEncoder()
 
         self.battle_data = {} # battle_tag -> List[(state, action, action_log_probability, value)]
-        self.prev_battle_obs_count = None
+        self.prev_battle_obs_count = {}
 
     def choose_move(self, battle: AbstractBattle):
         mapping = self.env_mapper.mapBattle(battle)
@@ -40,14 +40,22 @@ class RLBot(Player):
         action_scores, value_pred = self.decision_network.forward(state.to(DEVICE))
         action_ind, log_prob, order = self.translate_action_scores(action_scores.cpu(), battle)
         
+        if battle.battle_tag not in self.prev_battle_obs_count:
+            self.prev_battle_obs_count[battle.battle_tag] = None
+
         if (action_ind != -1):
-            if (len(battle.observations) == self.prev_battle_obs_count):
+            if (len(battle.observations) == self.prev_battle_obs_count[battle.battle_tag]):
                 self.battle_data[battle.battle_tag] = self.battle_data[battle.battle_tag][:-1]
             self.add_turn(action_ind, state, value_pred, log_prob, battle.battle_tag)
        
-        self.prev_battle_obs_count = len(battle.observations)
+        self.prev_battle_obs_count[battle.battle_tag] = len(battle.observations)
 
         return order
+    
+    def _battle_finished_callback(self, battle: AbstractBattle):
+        if len(battle.observations)-1 != len(self.battle_data[battle.battle_tag]):
+            print(len(battle.observations), len(self.battle_data[battle.battle_tag]))
+        assert(len(battle.observations)-1 == len(self.battle_data[battle.battle_tag]))
     
     def add_turn(self, action, state, action_log_prob, value_pred, battle_tag):
         if not battle_tag in self.battle_data:
@@ -58,7 +66,12 @@ class RLBot(Player):
         return self.battle_data
     
     def clear_battle_data(self):
+        for battle in self.battle_data.items():
+            for turn in battle:
+                del turn[0]
+                del turn[1]
         self.battle_data.clear()
+        # self.prev_battle_obs_count.clear()
 
     def translate_action_scores(self, action_scores: torch.Tensor, battle: AbstractBattle) -> Tuple[int, BattleOrder]:
         available_inds = []
