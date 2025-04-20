@@ -11,37 +11,42 @@ import torch.nn.functional as f
 from torch.distributions import Categorical
 from typing import List, Tuple
 
-NETWORK_HIDDEN_DIM = 512
-NETWORK_DROPOUT = 0.2
-
 DEVICE = "cpu"
 
 class RLBot(Player):
     env_mapper: EnvironmentMapper
     env_encoder: EnvironmentEncoder
-    decision_network: ActorCritic
 
     battle_data: dict
     name: str
+    prev_battle_obs_count: int
 
-    def __init__(self, name, format, team_name):
+    def __init__(self, name, format, team_name, decision_network: ActorCritic):
         self.name = name
+        self.decision_network = decision_network
 
         team = None if format.endswith("randombattle") else teams[team_name]
         super().__init__(AccountConfiguration(name, None), battle_format=format,  max_concurrent_battles=10000, team=team)
 
         self.env_mapper = EnvironmentMapper()
         self.env_encoder = EnvironmentEncoder()
-        self.decision_network = create_agent(NETWORK_HIDDEN_DIM, NETWORK_DROPOUT)
+
         self.battle_data = {} # battle_tag -> List[(state, action, action_log_probability, value)]
+        self.prev_battle_obs_count = None
 
     def choose_move(self, battle: AbstractBattle):
         mapping = self.env_mapper.mapBattle(battle)
         state = self.env_encoder.encodeBattle(mapping)
         action_scores, value_pred = self.decision_network.forward(state.to(DEVICE))
         action_ind, log_prob, order = self.translate_action_scores(action_scores.cpu(), battle)
+        
         if (action_ind != -1):
+            if (len(battle.observations) == self.prev_battle_obs_count):
+                self.battle_data[battle.battle_tag] = self.battle_data[battle.battle_tag][:-1]
             self.add_turn(action_ind, state, value_pred, log_prob, battle.battle_tag)
+       
+        self.prev_battle_obs_count = len(battle.observations)
+
         return order
     
     def add_turn(self, action, state, action_log_prob, value_pred, battle_tag):
