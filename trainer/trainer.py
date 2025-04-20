@@ -183,10 +183,6 @@ class Trainer:
         gae = 0
         values = values + [0]  # append 0 for V(s_{t+1}) at end
 
-        if len(rewards) > len(values):
-            print("HEEEERERERE")
-            print(len(rewards), len(values), flush=True)
-
         for t in reversed(range(len(rewards))):
             delta = rewards[t] + self.gamma * values[t + 1] - values[t]
             gae = delta + self.gamma * lam * gae
