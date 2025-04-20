@@ -31,20 +31,21 @@ class RLBot(SimpleHeuristicsPlayer):
         self.env_mapper = EnvironmentMapper()
         self.env_encoder = EnvironmentEncoder()
         self.decision_network = create_agent(NETWORK_HIDDEN_DIM, NETWORK_DROPOUT)
-        self.battle_data = {} # battle_tag -> List[(state, action)]
+        self.battle_data = {} # battle_tag -> List[(state, action, action_log_probability, value)]
 
     def choose_move(self, battle: AbstractBattle):
         mapping = self.env_mapper.mapBattle(battle)
         state = self.env_encoder.encodeBattle(mapping)
-        action_scores = self.decision_network.forward(state.to(DEVICE))[0]
-        action_ind, order = self.translate_action_scores(action_scores.cpu(), battle)
-        self.add_turn(action_ind, state, battle.battle_tag)
+        action_scores, value_pred = self.decision_network.forward(state.to(DEVICE))
+        action_ind, log_prob, order = self.translate_action_scores(action_scores.cpu(), battle)
+        if (action_ind != -1):
+            self.add_turn(action_ind, state, value_pred, log_prob, battle.battle_tag)
         return order
     
-    def add_turn(self, action, state, battle_tag):
+    def add_turn(self, action, state, action_log_prob, value_pred, battle_tag):
         if not battle_tag in self.battle_data:
             self.battle_data[battle_tag] = []
-        self.battle_data[battle_tag].append((state, action))
+        self.battle_data[battle_tag].append((state, action, action_log_prob, value_pred))
     
     def get_battle_data(self):
         return self.battle_data
@@ -67,12 +68,15 @@ class RLBot(SimpleHeuristicsPlayer):
         possible_inds = torch.Tensor(available_inds + available_zs + available_megas + switch_inds).long()
 
         if len(possible_inds) == 0:
-            return 0, super().choose_move(battle) # Might happen with struggle maybe?
+            order = super().choose_random_singles_move(battle)
+            return -1, None, order
 
         applicable_scores = action_scores[possible_inds]
         probs = f.softmax(applicable_scores, dim=0)
-        chosen_action = Categorical(probs).sample()
+        dist = Categorical(probs)
+        chosen_action = dist.sample()
         action_ind = possible_inds[chosen_action.item()]
+        log_prob_action = dist.log_prob(chosen_action)
 
         if action_ind < 4:
             order = BattleOrder(list(battle.active_pokemon.moves.values())[action_ind])
@@ -83,5 +87,5 @@ class RLBot(SimpleHeuristicsPlayer):
         else:
             order = BattleOrder(battle.available_switches[action_ind - 12])
         
-        return action_ind, order
+        return action_ind, log_prob_action, order
 

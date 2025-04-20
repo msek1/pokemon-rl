@@ -1,7 +1,7 @@
 import torch.nn as nn
 import torch.nn.functional as f
 
-from pokemon.bot.bot_mapping import STATE_DIMENSION
+from bot.bot_mapping import STATE_DIMENSION
 
 class BackboneNetwork(nn.Module):
     def __init__(self, in_features, hidden_dimensions, out_features, dropout):
