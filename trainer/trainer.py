@@ -38,6 +38,8 @@ class Trainer:
         for e in tqdm(range(1,num_epochs + 1)):
             aloss, vloss = self.run_epoch(p1, p2, optimizer)
             loss_results.append((aloss, vloss))
+            p1.clear_battle_data()
+            p1.prev_battle_obs_count = {}
             if set_weights_interval > 0 and e % set_weights_interval == 0 and p2 is RLBot:
                 p2.decision_network = deepcopy(p1.decision_network)
             
@@ -50,7 +52,6 @@ class Trainer:
                 p2.clear_battle_data()
 
         return loss_results, eval_results if len(eval_results) > 0 else None
-
 
     def run_epoch(self, p1: RLBot, p2: Player, optimizer: torch.optim.Optimizer):
         asyncio.run(self.make_players_play(p1, p2, self.battles_per_epoch))

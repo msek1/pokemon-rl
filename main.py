@@ -21,7 +21,6 @@ if __name__ == "__main__":
     opp = SimpleHeuristicsPlayer(AccountConfiguration("rlbotopp", None), battle_format="gen7ou",  max_concurrent_battles=100, team=teams.teams["gen_7_team"])
     
     trainer = Trainer(battles_per_epoch=200)
-    # asyncio.run(trainer.make_players_play(bot, opp, 20))
 
     optimizer = optim.Adam(decision_network.parameters(), lr=LEARNING_RATE)
     # policy_loss, value_loss = trainer.run_epoch(bot, opp, optimizer)
