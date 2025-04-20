@@ -1,11 +1,10 @@
 from poke_env import AccountConfiguration, ServerConfiguration
-from poke_env.player import RandomPlayer, SimpleHeuristicsPlayer, Gen7EnvSinglePlayer
+from poke_env.player import Player
 from poke_env.player.battle_order import BattleOrder
 from poke_env.teambuilder.teambuilder import Teambuilder
 from poke_env.environment.battle import AbstractBattle
 from bot.teams import teams
 from bot.bot_mapping import EnvironmentMapper, EnvironmentEncoder
-# from encoding.autoencoder import DEVICE
 from trainer.actorcritic import ActorCritic, create_agent
 import torch
 import torch.nn.functional as f
@@ -17,16 +16,19 @@ NETWORK_DROPOUT = 0.2
 
 DEVICE = "cpu"
 
-class RLBot(SimpleHeuristicsPlayer):
+class RLBot(Player):
     env_mapper: EnvironmentMapper
     env_encoder: EnvironmentEncoder
     decision_network: ActorCritic
 
     battle_data: dict
+    name: str
 
     def __init__(self, name, format, team_name):
+        self.name = name
+
         team = None if format.endswith("randombattle") else teams[team_name]
-        super().__init__(AccountConfiguration(name, None), battle_format=format,  max_concurrent_battles=100000, team=team)
+        super().__init__(AccountConfiguration(name, None), battle_format=format,  max_concurrent_battles=10000, team=team)
 
         self.env_mapper = EnvironmentMapper()
         self.env_encoder = EnvironmentEncoder()
@@ -49,6 +51,9 @@ class RLBot(SimpleHeuristicsPlayer):
     
     def get_battle_data(self):
         return self.battle_data
+    
+    def clear_battle_data(self):
+        self.battle_data.clear()
 
     def translate_action_scores(self, action_scores: torch.Tensor, battle: AbstractBattle) -> Tuple[int, BattleOrder]:
         available_inds = []

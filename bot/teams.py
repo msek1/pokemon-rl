@@ -72,10 +72,8 @@ Ability: Magic Guard
 EVs: 252 SpA / 4 SpD / 252 Spe  
 Timid Nature  
 IVs: 0 Atk  
-- Dazzling Gleam  
-- Calm Mind  
-- Energy Ball  
-- Psyshock  
+- Recover
+- Psyshock
 
 Garchomp @ Choice Scarf  
 Ability: Rough Skin  
