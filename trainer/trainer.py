@@ -1,13 +1,25 @@
-from poke_env.player import Player
+from poke_env import AccountConfiguration, ServerConfiguration
+from poke_env.player import Player, SimpleHeuristicsPlayer
 from poke_env.environment.observation import Observation
 from poke_env.environment.battle import AbstractBattle
 from bot.bot import RLBot
+from bot.bot_mapping import EnvironmentEncoder
+from trainer.actorcritic import ActorCritic
 from trainer.reward_policy import RewardPolicy
 import asyncio
 from copy import deepcopy
 from tqdm import tqdm
+import time
+from multiprocessing import Process
+import os
+import pickle
 
 EVAL_BATTLES = 100
+NUM_PROCESSES = 5
+RANDOM_BATTLE_FORMAT = "gen7randombattle"
+
+BOT_NET_FILE = "bot_data/main_model.pth"
+OPP_NET_FILE = "bot_data/opp_model.pth"
 
 FAINT_EVENT = "faint"
 DAMAGE_EVENT = "-damage"
@@ -18,6 +30,19 @@ from torch import distributions
 import torch.nn.functional as f
 import torch.optim as optim
 from torch.utils.data import TensorDataset, DataLoader
+
+def run_battles(i, n):
+    trainer = Trainer()
+    net = torch.load(BOT_NET_FILE, weights_only=False)
+    opp_net = torch.load(OPP_NET_FILE, weights_only=False)
+    encoder = EnvironmentEncoder()
+    # opp = SimpleHeuristicsPlayer(AccountConfiguration(f"rlbotopp{i+1}", None), battle_format="gen7randombattle",  max_concurrent_battles=20)
+    trainer.create_agent_and_run_battles(f"trainbotwkr{i+1}", f"rlbotopp{i+1}", net, opp_net, encoder, n)
+
+def merge_dicts(d1, d2):
+    for (k,v) in d2.items():
+        d1[k] = v
+    return d1
 
 class Trainer:
     def __init__(self,
@@ -32,31 +57,33 @@ class Trainer:
         self.entropy_coefficient = entropy_coefficient
         self.reward_policy = reward_policy
     
-    def run_epochs(self, p1: RLBot, p2: Player, optimizer: optim.Optimizer, num_epochs: int = 1,  set_weights_interval: int = 0, evaluation_interval: int = 0):
+    def run_epochs(self, network: ActorCritic, optimizer: optim.Optimizer, num_epochs: int = 1,
+                   set_weights_interval: int = 0, evaluation_interval: int = 0, checkpoint_interval: int = 0):
         eval_results = []
         loss_results = []
+        torch.save(network, OPP_NET_FILE)
         for e in tqdm(range(1,num_epochs + 1)):
-            aloss, vloss = self.run_epoch(p1, p2, optimizer)
+            aloss, vloss = self.run_epoch(network, optimizer)
             loss_results.append((aloss, vloss))
-            p1.clear_battle_data()
-            p1.prev_battle_obs_count = {}
-            if set_weights_interval > 0 and e % set_weights_interval == 0 and p2 is RLBot:
-                p2.decision_network = deepcopy(p1.decision_network)
-            
-            if evaluation_interval > 0 and e % evaluation_interval == 0:
-                p1.clear_battle_data()
-                asyncio.run(self.make_players_play(p1, p2, EVAL_BATTLES))
-                eval_results.append(self.calculate_eval_results(p1))
 
-            if p2 is RLBot:
-                p2.clear_battle_data()
+            if set_weights_interval > 0 and e % set_weights_interval == 0:
+                torch.save(network, OPP_NET_FILE)
+            
+            if checkpoint_interval > 0 and e % checkpoint_interval == 0:
+                torch.save(network, f"bot_data/checkpoints/model_{time.time()}.pth")
+            
+            # if evaluation_interval > 0 and e % evaluation_interval == 0:
+            #     asyncio.run(self.make_players_play(p1, p2, EVAL_BATTLES))
+            #     eval_results.append(self.calculate_eval_results(network))
 
         return loss_results, eval_results if len(eval_results) > 0 else None
 
-    def run_epoch(self, p1: RLBot, p2: Player, optimizer: torch.optim.Optimizer):
-        asyncio.run(self.make_players_play(p1, p2, self.battles_per_epoch))
+    def run_epoch(self, network: ActorCritic, optimizer: torch.optim.Optimizer):
+        # asyncio.run(self.make_players_play(p1, p2, self.battles_per_epoch))
+        self.run_parallel_battles()
+        battles, battle_data = self.read_battle_data_and_clean()
 
-        battle_returns_advantages = self.calculate_all_returns_advantages(p1)
+        battle_returns_advantages = self.calculate_all_returns_advantages(battles, battle_data)
 
         # battle ids are not needed at this point
         states = []
@@ -65,8 +92,8 @@ class Trainer:
         values = []
         returns = []
         advantages = []
-        for battle in p1.battle_data:
-            data = p1.battle_data[battle]
+        for battle in battle_data:
+            data = battle_data[battle]
             for entry in data:
                 states.append(entry[0])
                 actions.append(entry[1].item())
@@ -92,7 +119,7 @@ class Trainer:
         )
 
         policy_loss, value_loss = self.update_policy(
-            agent=p1.decision_network,
+            agent=network,
             training_results_dataset=results_dataset,
             ppo_steps=self.ppo_steps,
             optimizer=optimizer,
@@ -100,24 +127,48 @@ class Trainer:
             epsilon=self.clip_epsilon
         )
 
+        torch.save(network, "bot_data/main_model.pth")
+
         return policy_loss, value_loss
 
         # return battle_returns_advantages
     
-    def calculate_all_returns_advantages(self, p: RLBot):
+    def run_parallel_battles(self):
+        procs = []
+        for i in range(NUM_PROCESSES):
+            p = Process(target=run_battles, args = (i, (self.battles_per_epoch // NUM_PROCESSES) + 1))
+            procs.append(p)
+            p.start()
+        for p in procs:
+            p.join()
+
+    def read_battle_data_and_clean(self):
+        files = os.listdir("bot_data/tmp/")
+        battles = {}
+        battle_data = {}
+        for fname in files:
+            with open(f"bot_data/tmp/{fname}", "rb") as f:
+                d = pickle.load(f)
+            battles = merge_dicts(battles, d["battles"])
+            battle_data = merge_dicts(battle_data, d["states"])
+            os.remove(f"bot_data/tmp/{fname}")
+        return battles, battle_data
+
+    def calculate_all_returns_advantages(self, battles, battle_data):
         battle_returns_advantages = {}
-        for (tag, battle) in p.battles.items():
-            battle_data_episode = p.battle_data[tag]
+        for (tag, battle) in battles.items():
+            battle_data_episode = battle_data[tag]
             values = [step[3].item() for step in battle_data_episode]
-            battle_returns_advantages[tag] = self.calculate_reward_for_battle(battle, values)
+            battle_returns_advantages[tag] = self.calculate_reward_for_battle(battle, values, len(battle_data[tag]))
 
         return battle_returns_advantages
 
-    def calculate_reward_for_battle(self, battle: AbstractBattle, values):
+    def calculate_reward_for_battle(self, battle: AbstractBattle, values, n_states):
         rewards = [
             self.calculate_reward_for_turn(battle.observations[i], battle.player_role)
             for i in range(1, len(battle.observations))
         ]
+        rewards = rewards[:n_states]
         if battle.won:
             rewards[-1] += self.reward_policy.win_reward
         else:
@@ -168,8 +219,12 @@ class Trainer:
     async def make_players_play(self, p1: RLBot, p2: Player, num_battles: int):
         await asyncio.gather(
             p1.accept_challenges(None, num_battles),
-            p2.send_challenges(p1.name, num_battles)
+            self.delayed_challenge(p1, p2, num_battles)
         )
+
+    async def delayed_challenge(self, p1: RLBot, p2: Player, num_battles: int):
+        time.sleep(0.5)
+        await p2.send_challenges(p1.name, num_battles)
     
     def calculate_eval_results(self, p1: RLBot): # -> win percentage, average reward
         w = 0
@@ -260,4 +315,9 @@ class Trainer:
                 total_value_loss += value_loss.item()
         return total_policy_loss / ppo_steps, total_value_loss / ppo_steps
 
+    def create_agent_and_run_battles(self, name: str, opp_name: str, net: ActorCritic, opp_net: ActorCritic, encoder: EnvironmentEncoder, n: int):
+        bot = RLBot(name, RANDOM_BATTLE_FORMAT, None, net, encoder)
+        opp = RLBot(opp_name, RANDOM_BATTLE_FORMAT, None, opp_net, encoder)
+        asyncio.run(self.make_players_play(bot, opp, n))
+        bot.write_out_battles()
 

@@ -161,3 +161,24 @@ def create_move_dict():
         d[normalize_name(row["move"])] = move
     with open("bot_data/move_data.pkl", "wb") as f:
         pickle.dump(d, f)
+
+# because original data does not have all gen 7 moves as it was based on original games instead of second ones.
+def fix_move_dict():
+    with open("bot_data/move_data.pkl", "rb") as f:
+        d = pickle.load(f)
+    with open("data/smogon_data.json") as f:
+        smogon = json.load(f)
+    for move in smogon["moves"]:
+        name = normalize_name(move["name"])
+        if name not in d:
+            print(f"Adding {name}")
+            if move["category"] == "Non-Damaging":
+                move["category"] = "Special"
+            effectiveness = get_log_effectiveness_vector(move["type"])
+            d[name] = MoveEncodingData(
+                move["power"], MOVE_CATEGORIES.index(move["category"]),
+                move["accuracy"] / 100, move["pp"], move["priority"], 0,
+                Tensor(effectiveness)
+            )
+    with open("bot_data/move_data.pkl", "wb") as f:
+        pickle.dump(d, f)
