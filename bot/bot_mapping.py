@@ -314,6 +314,10 @@ class EnvironmentEncoder:
         )
         PKMN_MOVE_SIZE = 5*EMBEDDING_DIMENSION
         result[PKMN_MOVE_SIZE:PKMN_MOVE_SIZE + ability_dim] = self.ability_encoding[ability]
-        result[PKMN_MOVE_SIZE + ability_dim:PKMN_MOVE_SIZE + ability_dim + item_dim] = self.item_encoding[item]
+        if item != "":
+            result[PKMN_MOVE_SIZE + ability_dim:PKMN_MOVE_SIZE + ability_dim + item_dim] = self.item_encoding[item]
+        else:
+            # print(pokemon)
+            pass
         result[PKMN_MOVE_SIZE + ability_dim + item_dim:] = pokemon.status.to_vector().to(DEVICE)
         return result

@@ -10,6 +10,7 @@ import torch
 import torch.nn.functional as f
 from torch.distributions import Categorical
 from typing import List, Tuple
+import pickle
 
 DEVICE = "cpu"
 
@@ -21,15 +22,15 @@ class RLBot(Player):
     name: str
     prev_battle_obs_count: dict
 
-    def __init__(self, name, format, team_name, decision_network: ActorCritic):
+    def __init__(self, name, format, team_name, decision_network: ActorCritic, encoder: EnvironmentEncoder):
         self.name = name
         self.decision_network = decision_network
 
         team = None if format.endswith("randombattle") else teams[team_name]
-        super().__init__(AccountConfiguration(name, None), battle_format=format,  max_concurrent_battles=10000, team=team)
+        super().__init__(AccountConfiguration(name, None), battle_format=format,  max_concurrent_battles=100, team=team)
 
         self.env_mapper = EnvironmentMapper()
-        self.env_encoder = EnvironmentEncoder()
+        self.env_encoder = encoder
 
         self.battle_data = {} # battle_tag -> List[(state, action, action_log_probability, value)]
         self.prev_battle_obs_count = {}
@@ -45,17 +46,23 @@ class RLBot(Player):
 
         if (action_ind != -1):
             if (len(battle.observations) == self.prev_battle_obs_count[battle.battle_tag]):
-                self.battle_data[battle.battle_tag] = self.battle_data[battle.battle_tag][:-1]
+                if battle.battle_tag in self.battle_data:
+                    self.battle_data[battle.battle_tag] = self.battle_data[battle.battle_tag][:len(battle.observations)-1]
             self.add_turn(action_ind, state, value_pred, log_prob, battle.battle_tag)
        
         self.prev_battle_obs_count[battle.battle_tag] = len(battle.observations)
 
         return order
+
+    def write_out_battles(self):
+        with open(f"bot_data/tmp/{self.name}_battles.pkl", "wb") as f:
+            pickle.dump({"battles": self.battles, "states": self.battle_data}, f)
     
-    def _battle_finished_callback(self, battle: AbstractBattle):
-        if len(battle.observations)-1 != len(self.battle_data[battle.battle_tag]):
-            print(len(battle.observations), len(self.battle_data[battle.battle_tag]))
-        assert(len(battle.observations)-1 == len(self.battle_data[battle.battle_tag]))
+    # def _battle_finished_callback(self, battle: AbstractBattle):
+    #     # if abs(len(battle.observations) - len(self.battle_data[battle.battle_tag])) > 1:
+    #     #     print(len(battle.observations), len(self.battle_data[battle.battle_tag]), flush=True)
+    #     print(battle.battle_tag, len(battle.observations), len(self.battle_data[battle.battle_tag]), flush=True)
+    #     assert abs(len(battle.observations) - len(self.battle_data[battle.battle_tag])) <= 1
     
     def add_turn(self, action, state, action_log_prob, value_pred, battle_tag):
         if not battle_tag in self.battle_data:
@@ -79,12 +86,17 @@ class RLBot(Player):
                 if move.id in available_moves:
                     available_inds.append(i)
         
-        available_zs = [] if not battle.can_z_move else [4 + i for i in available_inds]
+        # available_zs = [] if not battle.can_z_move else [4 + i for i in available_inds]
+        available_zs = []
         available_megas = [] if not battle.can_mega_evolve else [8 + i for i in available_inds]
 
         team_non_active = [pkmn.base_species for pkmn in battle.team.values() if not pkmn.active]
         switches = battle.available_switches
-        switch_inds = [12 + i for i in range(5) if i < len(switches) and i == team_non_active.index(switches[i].base_species)]
+        switch_inds = []
+        try:
+            switch_inds = [12 + i for i in range(5) if i < len(switches) and i == team_non_active.index(switches[i].base_species)]
+        except Exception as e:
+            print("FAILED_SWITCHES:", team_non_active, switches)
         possible_inds = torch.Tensor(available_inds + available_zs + available_megas + switch_inds).long()
 
         if len(possible_inds) == 0:
