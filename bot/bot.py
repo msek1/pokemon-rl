@@ -1,16 +1,28 @@
 from poke_env import AccountConfiguration, ServerConfiguration
-from poke_env.player import RandomPlayer, SimpleHeuristicsPlayer
+from poke_env.player import RandomPlayer, SimpleHeuristicsPlayer, Gen7EnvSinglePlayer
+from poke_env.player.battle_order import BattleOrder
 from poke_env.teambuilder.teambuilder import Teambuilder
 from poke_env.environment.battle import AbstractBattle
 from bot.teams import teams
 from bot.bot_mapping import EnvironmentMapper, EnvironmentEncoder
-from encoding.autoencoder import DEVICE
+# from encoding.autoencoder import DEVICE
+from trainer.actorcritic import ActorCritic, create_agent
+import torch
+import torch.nn.functional as f
+from torch.distributions import Categorical
+from typing import List, Tuple
 
-import time
+NETWORK_HIDDEN_DIM = 512
+NETWORK_DROPOUT = 0.2
+
+DEVICE = "cpu"
 
 class RLBot(SimpleHeuristicsPlayer):
     env_mapper: EnvironmentMapper
     env_encoder: EnvironmentEncoder
+    decision_network: ActorCritic
+
+    battle_data: dict
 
     def __init__(self, name, format, team_name):
         team = None if format.endswith("randombattle") else teams[team_name]
@@ -18,26 +30,58 @@ class RLBot(SimpleHeuristicsPlayer):
 
         self.env_mapper = EnvironmentMapper()
         self.env_encoder = EnvironmentEncoder()
+        self.decision_network = create_agent(NETWORK_HIDDEN_DIM, NETWORK_DROPOUT)
+        self.battle_data = {} # battle_tag -> List[(state, action)]
 
     def choose_move(self, battle: AbstractBattle):
-        start = time.time_ns()
         mapping = self.env_mapper.mapBattle(battle)
-        mid = time.time_ns()
-        encoding = self.env_encoder.encodeBattle(mapping)
-        end = time.time_ns()
-        print(f"Mapping Time: {(mid - start) / 1000000}ms, {(end - mid) / 1000000}ms")
-        print(encoding.device)
-        return super().choose_move(battle)
+        state = self.env_encoder.encodeBattle(mapping)
+        action_scores = self.decision_network.forward(state.to(DEVICE))[0]
+        action_ind, order = self.translate_action_scores(action_scores.cpu(), battle)
+        self.add_turn(action_ind, state, battle.battle_tag)
+        return order
+    
+    def add_turn(self, action, state, battle_tag):
+        if not battle_tag in self.battle_data:
+            self.battle_data[battle_tag] = []
+        self.battle_data[battle_tag].append((state, action))
+    
+    def get_battle_data(self):
+        return self.battle_data
 
-    async def play(self):
-        # No authentication required
-        # my_account_config = AccountConfiguration("pokemonrlbotcs486", None)
-        # player = SimpleHeuristicsPlayer(account_configuration=my_account_config, battle_format="gen9ou", team=ou_team)
-        # player = SimpleHeuristicsPlayer(account_configuration=my_account_config, battle_format="gen7ou", team=gen_7_team)
-        # player = SimpleHeuristicsPlayer(account_configuration=my_account_config, battle_format="gen7anythinggoes", team=teams["gen_7_ag"])
-        # player = RandomPlayer(account_configuration=my_account_config, battle_format="gen7anythinggoes", team=gen_7_ag)
-        # player = SimpleHeuristicsPlayer(account_configuration=my_account_config)
-        # team = Teambuilder.parse_showdown_team(ou_team)
-        print("Starting bot...")
-        # print(str(team)[1:-1])
-        await self.accept_challenges(None, 1)
+    def translate_action_scores(self, action_scores: torch.Tensor, battle: AbstractBattle) -> Tuple[int, BattleOrder]:
+        available_inds = []
+        
+        available_moves = [move.id for move in battle.available_moves]
+        if battle.active_pokemon is not None:
+            for (i,move) in enumerate(battle.active_pokemon.moves.values()):
+                if move.id in available_moves:
+                    available_inds.append(i)
+        
+        available_zs = [] if not battle.can_z_move else [4 + i for i in available_inds]
+        available_megas = [] if not battle.can_mega_evolve else [8 + i for i in available_inds]
+
+        team_non_active = [pkmn.base_species for pkmn in battle.team.values() if not pkmn.active]
+        switches = battle.available_switches
+        switch_inds = [12 + i for i in range(5) if i < len(switches) and i == team_non_active.index(switches[i].base_species)]
+        possible_inds = torch.Tensor(available_inds + available_zs + available_megas + switch_inds).long()
+
+        if len(possible_inds) == 0:
+            return 0, super().choose_move(battle) # Might happen with struggle maybe?
+
+        applicable_scores = action_scores[possible_inds]
+        probs = f.softmax(applicable_scores, dim=0)
+        chosen_action = Categorical(probs).sample()
+        action_ind = possible_inds[chosen_action.item()]
+
+        if action_ind < 4:
+            order = BattleOrder(list(battle.active_pokemon.moves.values())[action_ind])
+        elif action_ind < 8:
+            order = BattleOrder(list(battle.active_pokemon.moves.values())[action_ind-4], z_move=True)
+        elif action_ind < 12:
+            order = BattleOrder(list(battle.active_pokemon.moves.values())[action_ind-8], mega=True)
+        else:
+            order = BattleOrder(battle.available_switches[action_ind - 12])
+        
+        return action_ind, order
+

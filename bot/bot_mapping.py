@@ -6,7 +6,7 @@ from poke_env.environment import Effect, SideCondition, Weather, Field, Pokemon 
 import torch
 import pickle
 from encoding.create_encoding_datasets import PokemonEncodingData, CURRENT_PP_INDEX, get_log_effectiveness_vector
-from encoding.autoencoder import Autoencoder, EMBEDDING_DIMENSION, DEVICE
+from encoding.autoencoder import Autoencoder, EMBEDDING_DIMENSION
 from encoding.sphere_encoding import ability_dim, item_dim
 from typing import List, Optional
 
@@ -19,6 +19,7 @@ POKEMON_FULL_ENCODING_DIM = 5*EMBEDDING_DIMENSION + ability_dim + item_dim + STA
 STATE_DIMENSION = 2*BOOST_ENCODING_DIM + TERRAIN_ENCODING_DIM + 14 * POKEMON_FULL_ENCODING_DIM + 2*EPHEMERAL_STATUS_DIM
 
 DEVICE = "cpu"
+
 class EnvironmentMapper:
     def mapBattle(self, battle: AbstractBattle) -> NetworkBattle:
         ownTeam = battle.team.values()
@@ -272,8 +273,11 @@ class EnvironmentEncoder:
 
         PKMN_AND_BOOSTS = 14*PKMN_DIM + 2*BOOST_ENCODING_DIM
         
-        res[PKMN_AND_BOOSTS: PKMN_AND_BOOSTS + EPHEMERAL_STATUS_DIM] = battle.ownActiveStatus.to_vector()
-        res[PKMN_AND_BOOSTS + EPHEMERAL_STATUS_DIM: PKMN_AND_BOOSTS + 2*EPHEMERAL_STATUS_DIM] = battle.oppActiveStatus.to_vector()
+        if battle.ownActiveStatus is not None:
+            res[PKMN_AND_BOOSTS: PKMN_AND_BOOSTS + EPHEMERAL_STATUS_DIM] = battle.ownActiveStatus.to_vector()
+        if battle.oppActiveStatus is not None:
+            res[PKMN_AND_BOOSTS + EPHEMERAL_STATUS_DIM: PKMN_AND_BOOSTS + 2*EPHEMERAL_STATUS_DIM] = battle.oppActiveStatus.to_vector()
+        
         res[PKMN_AND_BOOSTS + 2*EPHEMERAL_STATUS_DIM:] = battle.field.to_vector()
         return res.to(DEVICE)
 
