@@ -19,7 +19,7 @@ class RLBot(Player):
 
     battle_data: dict
     name: str
-    prev_battle_obs_count: int
+    prev_battle_obs_count: dict
 
     def __init__(self, name, format, team_name, decision_network: ActorCritic):
         self.name = name
@@ -66,10 +66,7 @@ class RLBot(Player):
         return self.battle_data
     
     def clear_battle_data(self):
-        for battle in self.battle_data.items():
-            for turn in battle:
-                del turn[0]
-                del turn[1]
+        self.battles.clear()
         self.battle_data.clear()
         # self.prev_battle_obs_count.clear()
 
