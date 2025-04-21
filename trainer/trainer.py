@@ -106,6 +106,7 @@ class Trainer:
         states = []
         actions = []
         actions_log_probs = []
+        action_masks = []
         values = []
         returns = []
         advantages = []
@@ -115,7 +116,8 @@ class Trainer:
                 states.append(entry[0])
                 actions.append(entry[1].item())
                 actions_log_probs.append(entry[2].item())
-                values.append(entry[3].item())
+                action_masks.append(entry[3])
+                values.append(entry[4].item())
 
             ra = battle_returns_advantages.get(battle)
             returns.append(ra[0])
@@ -125,6 +127,7 @@ class Trainer:
         states = torch.stack(states) 
         actions = torch.tensor(actions)
         actions_log_probs = torch.tensor(actions_log_probs)
+        masks = torch.stack(action_masks).bool()
         values = torch.tensor(values)
 
         results_dataset = TensorDataset(
@@ -132,7 +135,8 @@ class Trainer:
             actions.detach(),
             actions_log_probs.detach(),
             advantages.detach(),
-            returns.detach()
+            returns.detach(),
+            masks.detach()
         )
 
         policy_loss, value_loss = self.update_policy(
@@ -171,7 +175,7 @@ class Trainer:
         battle_returns_advantages = {}
         for (tag, battle) in battles.items():
             battle_data_episode = battle_data[tag]
-            values = [step[3].item() for step in battle_data_episode]
+            values = [step[4].item() for step in battle_data_episode]
             battle_returns_advantages[tag] = self.calculate_reward_for_battle(battle, values, len(battle_data[tag]))
 
         return battle_returns_advantages
@@ -236,7 +240,7 @@ class Trainer:
         )
 
     async def delayed_challenge(self, p1: RLBot, p2: Player, num_battles: int):
-        time.sleep(0.5)
+        time.sleep(0.1)
         await p2.send_challenges(p1.name, num_battles)
     
     def calculate_eval_results(self, p1: RLBot): # -> win percentage, average reward
@@ -270,7 +274,7 @@ class Trainer:
         # advantages = returns - values
 
         advantages = torch.tensor(advantages, dtype=torch.float32)
-        # returns = rewards * torch.pow(self.gamma, torch.arange(0,len(rewards)))
+        returns = rewards * torch.pow(self.gamma, torch.arange(0,len(rewards)))
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
         return (returns.to(DEVICE), advantages.to(DEVICE))
 
@@ -293,8 +297,9 @@ class Trainer:
     def calculate_losses(
         surrogate_loss, entropy, entropy_coefficient, returns, value_pred):
         entropy_bonus = entropy_coefficient * entropy
-        policy_loss = -(surrogate_loss + entropy_bonus).sum()
-        value_loss = f.smooth_l1_loss(returns, value_pred).sum()
+        policy_loss = -(surrogate_loss + entropy_bonus).mean()
+        value_loss = f.smooth_l1_loss(returns, value_pred).mean()
+        # value_loss = f.mse_loss(returns, value_pred).mean()
         return policy_loss, value_loss
     
 
@@ -309,10 +314,12 @@ class Trainer:
             shuffle=True)
         
         for _ in range(ppo_steps):
-            for (states, actions, actions_log_probability_old, advantages, returns) in batch_dataset:
+            for (states, actions, actions_log_probability_old, advantages, returns, mask) in batch_dataset:
                 action_pred, value_pred = agent(states.to(DEVICE))
                 value_pred = value_pred[:, 0] # the predicted values across the batch
 
+                # print(action_pred.shape, mask.shape, action_pred[mask].shape)
+                action_pred = torch.where(mask, action_pred, action_pred.min() - 100)
                 action_prob = f.softmax(action_pred, dim=-1) # the action distributions across the batch
 
                 action_distribution = distributions.Categorical(action_prob)
@@ -332,12 +339,12 @@ class Trainer:
                     value_pred)
                 
                 optimizer.zero_grad()
-                total_loss = policy_loss + value_loss
+                total_loss = (policy_loss + value_loss)
                 total_loss.backward()
                 optimizer.step()
 
-                total_policy_loss += policy_loss.item()
-                total_value_loss += value_loss.item()
+                total_policy_loss += policy_loss.mean().item()
+                total_value_loss += value_loss.mean().item()
         return total_policy_loss / ppo_steps, total_value_loss / ppo_steps
 
     def create_agent_and_run_battles(self, name: str, opp_name: str, net: ActorCritic, opp_net: ActorCritic, encoder: EnvironmentEncoder, n: int):
