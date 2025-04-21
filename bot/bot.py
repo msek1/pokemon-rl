@@ -27,7 +27,7 @@ class RLBot(Player):
         self.decision_network = decision_network
 
         team = None if format.endswith("randombattle") else teams[team_name]
-        super().__init__(AccountConfiguration(name, None), battle_format=format,  max_concurrent_battles=100, team=team)
+        super().__init__(AccountConfiguration(name, None), battle_format=format,  max_concurrent_battles=10, team=team)
 
         self.env_mapper = EnvironmentMapper()
         self.env_encoder = encoder
@@ -75,7 +75,7 @@ class RLBot(Player):
     def clear_battle_data(self):
         self.battles.clear()
         self.battle_data.clear()
-        # self.prev_battle_obs_count.clear()
+        self.prev_battle_obs_count.clear()
 
     def translate_action_scores(self, action_scores: torch.Tensor, battle: AbstractBattle) -> Tuple[int, BattleOrder]:
         available_inds = []
