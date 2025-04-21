@@ -57,33 +57,41 @@ class Trainer:
         self.entropy_coefficient = entropy_coefficient
         self.reward_policy = reward_policy
     
-    def run_epochs(self, network: ActorCritic, optimizer: optim.Optimizer, num_epochs: int = 1,
-                   set_weights_interval: int = 0, evaluation_interval: int = 0, checkpoint_interval: int = 0):
+    def run_epochs(self, p1: RLBot, p2: Player, optimizer: optim.Optimizer, num_epochs: int = 1,  set_weights_interval: int = 0, evaluation_interval: int = 0, checkpoint_interval:int = 0):
         eval_results = []
         loss_results = []
-        torch.save(network, OPP_NET_FILE)
-        for e in tqdm(range(1,num_epochs + 1)):
-            aloss, vloss = self.run_epoch(network, optimizer)
-            loss_results.append((aloss, vloss))
+        num_steps = []
+        p2.decision_network = deepcopy(p1.decision_network)
 
-            if set_weights_interval > 0 and e % set_weights_interval == 0:
-                torch.save(network, OPP_NET_FILE)
+        for e in tqdm(range(1,num_epochs + 1)):
+            aloss, vloss, steps = self.run_epoch(p1, p2, optimizer)
+            loss_results.append((aloss, vloss))
+            num_steps.append(steps)
+            p1.clear_battle_data()
+            p1.prev_battle_obs_count = {}
+
+            if set_weights_interval > 0 and e % set_weights_interval == 0 and p2 is RLBot:
+                p2.decision_network = deepcopy(p1.decision_network)
             
             if checkpoint_interval > 0 and e % checkpoint_interval == 0:
-                torch.save(network, f"bot_data/checkpoints/model_{time.time()}.pth")
+                torch.save(p1.decision_network, f"bot_data/checkpoints/model_{time.time()}.pth")
+
+            if evaluation_interval > 0 and e % evaluation_interval == 0:
+                p1.clear_battle_data()
+                with torch.no_grad():
+                    asyncio.run(self.make_players_play(p1, p2, EVAL_BATTLES))
+                eval_results.append(self.calculate_eval_results(p1))
             
-            # if evaluation_interval > 0 and e % evaluation_interval == 0:
-            #     asyncio.run(self.make_players_play(p1, p2, EVAL_BATTLES))
-            #     eval_results.append(self.calculate_eval_results(network))
+            if p2 is RLBot:
+                p2.clear_battle_data()
 
-        return loss_results, eval_results if len(eval_results) > 0 else None
+        return loss_results, eval_results if len(eval_results) > 0 else None, num_steps
 
-    def run_epoch(self, network: ActorCritic, optimizer: torch.optim.Optimizer):
-        # asyncio.run(self.make_players_play(p1, p2, self.battles_per_epoch))
-        self.run_parallel_battles()
-        battles, battle_data = self.read_battle_data_and_clean()
+    def run_epoch(self, p1: RLBot, p2: Player, optimizer: torch.optim.Optimizer):
+        asyncio.run(self.make_players_play(p1, p2, self.battles_per_epoch))
+        battle_returns_advantages = self.calculate_all_returns_advantages(p1.battles, p1.battle_data)
 
-        battle_returns_advantages = self.calculate_all_returns_advantages(battles, battle_data)
+        num_steps = sum([len(v) for v in p1.battle_data.values()])
 
         # battle ids are not needed at this point
         states = []
@@ -92,8 +100,8 @@ class Trainer:
         values = []
         returns = []
         advantages = []
-        for battle in battle_data:
-            data = battle_data[battle]
+        for battle in p1.battle_data:
+            data = p1.battle_data[battle]
             for entry in data:
                 states.append(entry[0])
                 actions.append(entry[1].item())
@@ -119,7 +127,7 @@ class Trainer:
         )
 
         policy_loss, value_loss = self.update_policy(
-            agent=network,
+            agent=p1.decision_network,
             training_results_dataset=results_dataset,
             ppo_steps=self.ppo_steps,
             optimizer=optimizer,
@@ -127,11 +135,7 @@ class Trainer:
             epsilon=self.clip_epsilon
         )
 
-        torch.save(network, "bot_data/main_model.pth")
-
-        return policy_loss, value_loss
-
-        # return battle_returns_advantages
+        return policy_loss, value_loss, num_steps
     
     def run_parallel_battles(self):
         procs = []
