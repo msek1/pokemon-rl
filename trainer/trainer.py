@@ -243,6 +243,28 @@ class Trainer:
         time.sleep(0.1)
         await p2.send_challenges(p1.name, num_battles)
     
+    def evaluate(self, p1: RLBot, p2: Player, eval_battles: int):
+        battles_to_do = eval_battles
+        battles_done = 0
+        cur_win_ratio = 0
+        cur_expected_reward = 0
+
+        while battles_to_do > 0:
+            cur_battles = battles_to_do if battles_to_do <= EVAL_BATTLES else EVAL_BATTLES
+            asyncio.run(self.make_players_play(p1, p2, cur_battles))
+            wr, rw = self.calculate_eval_results(p1)
+            cur_win_ratio = (cur_win_ratio * battles_done + wr*cur_battles) / (battles_done + cur_battles)
+            cur_expected_reward = (cur_expected_reward * battles_done + rw*cur_battles) / (battles_done + cur_battles)
+            battles_to_do -= EVAL_BATTLES
+            battles_done += cur_battles
+            p1.clear_battle_data()
+            if type(p2) is RLBot:
+                p2.clear_battle_data()
+            else:
+                p2.battles.clear()
+        return cur_win_ratio, cur_expected_reward
+
+
     def calculate_eval_results(self, p1: RLBot): # -> win percentage, average reward
         w = 0
         for b in p1.battles.values():
@@ -298,7 +320,7 @@ class Trainer:
         surrogate_loss, entropy, entropy_coefficient, returns, value_pred):
         entropy_bonus = entropy_coefficient * entropy
         policy_loss = -(surrogate_loss + entropy_bonus).mean()
-        value_loss = f.smooth_l1_loss(returns, value_pred).mean()
+        value_loss = f.smooth_l1_loss(returns, value_pred).sum()
         # value_loss = f.mse_loss(returns, value_pred).mean()
         return policy_loss, value_loss
     
@@ -343,9 +365,9 @@ class Trainer:
                 total_loss.backward()
                 optimizer.step()
 
-                total_policy_loss += policy_loss.mean().item()
-                total_value_loss += value_loss.mean().item()
-        return total_policy_loss / ppo_steps, total_value_loss / ppo_steps
+                total_policy_loss += policy_loss.item()
+                total_value_loss += value_loss.item()
+        return total_policy_loss / ppo_steps * (BATCH_SIZE / len(training_results_dataset)), total_value_loss / ppo_steps * (BATCH_SIZE / len(training_results_dataset))
 
     def create_agent_and_run_battles(self, name: str, opp_name: str, net: ActorCritic, opp_net: ActorCritic, encoder: EnvironmentEncoder, n: int):
         bot = RLBot(name, RANDOM_BATTLE_FORMAT, None, net, encoder)
