@@ -25,6 +25,8 @@ FAINT_EVENT = "faint"
 DAMAGE_EVENT = "-damage"
 HEAL_EVENT = "-heal"
 
+DEVICE = "cpu"
+
 import torch
 from torch import distributions
 import torch.nn.functional as f
@@ -62,27 +64,34 @@ class Trainer:
         loss_results = []
         num_steps = []
         p2.decision_network = deepcopy(p1.decision_network)
+        eval_opp = SimpleHeuristicsPlayer(AccountConfiguration("rlevalopp", None), battle_format="gen7randombattle", max_concurrent_battles=20)
 
         for e in tqdm(range(1,num_epochs + 1)):
             aloss, vloss, steps = self.run_epoch(p1, p2, optimizer)
+            print(aloss, vloss, steps)
             loss_results.append((aloss, vloss))
             num_steps.append(steps)
             p1.clear_battle_data()
             p1.prev_battle_obs_count = {}
 
-            if set_weights_interval > 0 and e % set_weights_interval == 0 and p2 is RLBot:
+            if set_weights_interval > 0 and e % set_weights_interval == 0 and type(p2) is RLBot:
+                print("Updating opponent")
                 p2.decision_network = deepcopy(p1.decision_network)
             
             if checkpoint_interval > 0 and e % checkpoint_interval == 0:
                 torch.save(p1.decision_network, f"bot_data/checkpoints/model_{time.time()}.pth")
 
             if evaluation_interval > 0 and e % evaluation_interval == 0:
+                print("Running Evaluation")
                 p1.clear_battle_data()
                 with torch.no_grad():
-                    asyncio.run(self.make_players_play(p1, p2, EVAL_BATTLES))
+                    asyncio.run(self.make_players_play(p1, eval_opp, EVAL_BATTLES))
                 eval_results.append(self.calculate_eval_results(p1))
+                p1.clear_battle_data()
+                eval_opp.battles.clear()
+                print(eval_results[-1])
             
-            if p2 is RLBot:
+            if type(p2) is RLBot:
                 p2.clear_battle_data()
 
         return loss_results, eval_results if len(eval_results) > 0 else None, num_steps
@@ -234,24 +243,36 @@ class Trainer:
         w = 0
         for b in p1.battles.values():
             if b.won: w+=1
-        rewards = self.calculate_all_discounted_reward(p1)
+        rewards_data = self.calculate_all_returns_advantages(p1.battles, p1.battle_data)
+        rewards = [v[0].mean() for v in rewards_data.values()]
 
         return (w / len(p1.battles), sum(rewards) / len(rewards))
     
     def do_gae_episode(self, rewards, values, lam=0.95):
         advantages = []
+        returns = []
         gae = 0
-        values = values + [0]  # append 0 for V(s_{t+1}) at end
+        discounted = 0
+        values = torch.Tensor(values + [0])
+        rewards = torch.Tensor(rewards)
+        deltas = rewards + self.gamma * values[1:] - values[:-1]
 
         for t in reversed(range(len(rewards))):
-            delta = rewards[t] + self.gamma * values[t + 1] - values[t]
-            gae = delta + self.gamma * lam * gae
-            advantages.insert(0, gae)
+            gae = deltas[t] + self.gamma * lam * gae
+            advantages.append(gae)
+
+            discounted = rewards[t] + self.gamma*discounted
+            returns.append(discounted)
+            
+        advantages.reverse()
+        returns.reverse()
+        returns = torch.Tensor(returns)
+        # advantages = returns - values
 
         advantages = torch.tensor(advantages, dtype=torch.float32)
-        returns = advantages + torch.tensor(values[:-1], dtype=torch.float32)
+        # returns = rewards * torch.pow(self.gamma, torch.arange(0,len(rewards)))
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
-        return (returns, advantages)
+        return (returns.to(DEVICE), advantages.to(DEVICE))
 
     def calculate_surrogate_loss(
         actions_log_probability_old,
@@ -273,7 +294,7 @@ class Trainer:
         surrogate_loss, entropy, entropy_coefficient, returns, value_pred):
         entropy_bonus = entropy_coefficient * entropy
         policy_loss = -(surrogate_loss + entropy_bonus).sum()
-        value_loss = f.smooth_l1_loss(returns, value_pred)
+        value_loss = f.smooth_l1_loss(returns, value_pred).sum()
         return policy_loss, value_loss
     
 
@@ -285,20 +306,20 @@ class Trainer:
         batch_dataset = DataLoader(
             training_results_dataset,
             batch_size=BATCH_SIZE,
-            shuffle=False)
+            shuffle=True)
         
         for _ in range(ppo_steps):
             for (states, actions, actions_log_probability_old, advantages, returns) in batch_dataset:
-                action_pred, value_pred = agent(states)
+                action_pred, value_pred = agent(states.to(DEVICE))
                 value_pred = value_pred[:, 0] # the predicted values across the batch
 
                 action_prob = f.softmax(action_pred, dim=-1) # the action distributions across the batch
 
                 action_distribution = distributions.Categorical(action_prob)
-                action_log_distribution = action_distribution.log_prob(actions) # the current log-distribution of actions taken
+                action_log_distribution = action_distribution.log_prob(actions.to(DEVICE)) # the current log-distribution of actions taken
                 entropy = action_distribution.entropy()
                 surrogate_loss = Trainer.calculate_surrogate_loss(
-                    actions_log_probability_old,
+                    actions_log_probability_old.to(DEVICE),
                     action_log_distribution,
                     epsilon,
                     advantages)
