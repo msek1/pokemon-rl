@@ -12,6 +12,7 @@ from trainer.trainer import Trainer
 import asyncio
 import torch
 import torch.optim as optim
+from copy import deepcopy
 
 if __name__ == "__main__":
     NETWORK_HIDDEN_DIM = 512
@@ -23,10 +24,14 @@ if __name__ == "__main__":
 
     trainer = Trainer(battles_per_epoch=50)
     optimizer = optim.Adam(decision_network.parameters(), lr=LEARNING_RATE)
-    losses,evals = trainer.run_epochs(decision_network, optimizer, 10, checkpoint_interval=5)
+    encoder = EnvironmentEncoder()
+    bot = RLBot("rlbotcs486", "gen7randombattle", None, decision_network, encoder)
+    opp = RLBot("rloppcs486", "gen7randombattle", None, decision_network, encoder)
+
+    losses, evals, steps = trainer.run_epochs(bot, opp, optimizer, 1500, set_weights_interval=25, checkpoint_interval=25)
 
     with open("training_results.pkl", "wb") as f:
-        pickle.dump({"loss": losses, "eval": evals}, f)
+        pickle.dump({"loss": losses, "eval": evals, "steps": steps}, f)
     
     print([l[0] for l in losses])
     plt.plot([l[0] for l in losses])
