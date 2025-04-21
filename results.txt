@@ -1,0 +1,9 @@
+Heuristic play training:
+Random: (0.87, tensor(0.3393))
+Heuristics Player: (0.086, tensor(-0.7533))
+Self: (0.502, tensor(0.0100))
+
+Self play training:
+Random: (0.832, tensor(0.2926))
+Heuristics Player: (0.076, tensor(-0.7697))
+Self: (0.525, tensor(0.0246))
