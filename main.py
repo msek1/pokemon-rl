@@ -23,7 +23,7 @@ if __name__ == "__main__":
     torch.save(decision_network, "bot_data/main_model.pth")
 
     trainer = Trainer(battles_per_epoch=25)
-    optimizer = optim.Adam(decision_network.parameters(), lr=LEARNING_RATE)
+    optimizer = optim.Adam(decision_network.parameters(), lr=LEARNING_RATE, weight_decay=1e-5)
     encoder = EnvironmentEncoder()
     bot = RLBot("rlbotcs486", "gen7randombattle", None, decision_network, encoder)
     opp = RLBot("rloppcs486", "gen7randombattle", None, decision_network, encoder)
